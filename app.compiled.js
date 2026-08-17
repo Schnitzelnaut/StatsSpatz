@@ -1305,6 +1305,34 @@ function TextArea({
 }
 
 /* ---------- correlation analysis ---------- */
+const VERGLEICH_METRIKEN = [{
+  key: "wohlbefinden",
+  label: "Wohlbefinden"
+}, {
+  key: "energie",
+  label: "Energie"
+}, {
+  key: "brainfog",
+  label: "Brain Fog"
+}, {
+  key: "kopfschmerz",
+  label: "Kopfschmerz"
+}, {
+  key: "gelenkschmerz",
+  label: "Gelenkschmerz"
+}, {
+  key: "muskelschmerz",
+  label: "Muskelschmerz"
+}, {
+  key: "migraene",
+  label: "Migräne"
+}, {
+  key: "schlafqualitaet",
+  label: "Schlafqualität"
+}, {
+  key: "stress",
+  label: "Stress"
+}];
 function pearson(xs, ys) {
   const n = xs.length;
   if (n < 3) return null;
@@ -1536,34 +1564,6 @@ function ExportCard({
 }
 
 /* ---------- verlauf (history) view ---------- */
-const VERGLEICH_METRIKEN = [{
-  key: "wohlbefinden",
-  label: "Wohlbefinden"
-}, {
-  key: "energie",
-  label: "Energie"
-}, {
-  key: "brainfog",
-  label: "Brain Fog"
-}, {
-  key: "kopfschmerz",
-  label: "Kopfschmerz"
-}, {
-  key: "gelenkschmerz",
-  label: "Gelenkschmerz"
-}, {
-  key: "muskelschmerz",
-  label: "Muskelschmerz"
-}, {
-  key: "migraene",
-  label: "Migräne"
-}, {
-  key: "schlafqualitaet",
-  label: "Schlafqualität"
-}, {
-  key: "stress",
-  label: "Stress"
-}];
 function ChipGroupMulti({
   options,
   values,
