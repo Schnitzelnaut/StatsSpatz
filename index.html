@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>StatSpatz</title>
+<meta name="theme-color" content="#14161F" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="StatSpatz" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<link rel="icon" href="icon-32.png" />
+<style>
+  html, body, #root { margin: 0; padding: 0; min-height: 100vh; background: #14161F; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#9DA3BA;font-family:system-ui,sans-serif;text-align:center;padding:24px;">
+    lädt …
+  </div>
+</div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-is@18/umd/react-is.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+<script crossorigin src="https://unpkg.com/recharts@2/umd/Recharts.js"></script>
+
+<script src="app.compiled.js"></script>
+<script>
+  try {
+    if (typeof StatSpatz === "undefined") throw new Error("StatSpatz-Komponente wurde nicht gefunden (app.compiled.js nicht geladen oder Fehler beim Ausführen)");
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(React.createElement(StatSpatz));
+    document.getElementById("root").dataset.loaded = "true";
+  } catch (e) {
+    document.getElementById("root").innerHTML =
+      '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F1EDE4;font-family:system-ui,sans-serif;text-align:center;padding:24px;background:#14161F;">' +
+      '<div style="font-size:17px;margin-bottom:10px;">StatSpatz konnte nicht laden</div>' +
+      '<div style="font-size:12px;color:#E2836F;background:#20232F;border-radius:8px;padding:12px;text-align:left;max-width:100%;overflow-wrap:break-word;font-family:monospace;">' +
+      (e && e.message ? e.message : String(e)) +
+      '</div></div>';
+  }
+</script>
+
+<script>
+  window.addEventListener("error", function (e) {
+    const root = document.getElementById("root");
+    if (root && !root.dataset.loaded) {
+      root.innerHTML =
+        '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F1EDE4;font-family:system-ui,sans-serif;text-align:center;padding:24px;background:#14161F;">' +
+        '<div style="font-size:17px;margin-bottom:10px;">StatSpatz konnte nicht laden</div>' +
+        '<div style="font-size:12px;color:#E2836F;background:#20232F;border-radius:8px;padding:12px;text-align:left;max-width:100%;overflow-wrap:break-word;font-family:monospace;">' +
+        (e.message || "unbekannter Fehler") + '<br>' + (e.filename ? e.filename + ':' + e.lineno : '') +
+        '</div></div>';
+    }
+  });
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
