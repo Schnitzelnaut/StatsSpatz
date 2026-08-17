@@ -449,7 +449,7 @@ function StatSpatz() {
     puffed: justSaved,
     justSaved: justSaved && entry.date === todayKey,
     hasToday: !!entry.savedAt && entry.date === todayKey
-  }), view === "form" && /*#__PURE__*/React.createElement(FormView, {
+  }), view === "form" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(FormView, {
     entry: entry,
     setField: setField,
     medications: medications,
@@ -460,25 +460,67 @@ function StatSpatz() {
     error: error,
     wetterStatus: wetterStatus,
     onRefreshWetter: () => holeWetter(true)
-  }), view === "verlauf" && /*#__PURE__*/React.createElement(VerlaufView, {
+  })), view === "verlauf" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(VerlaufView, {
     entries: entries,
     medications: medications,
     featureRequests: featureRequests
-  }), view === "medikamente" && /*#__PURE__*/React.createElement(MedikamenteView, {
+  })), view === "medikamente" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(MedikamenteView, {
     medications: medications,
     onChange: persistMedications
-  }), view === "einstellungen" && /*#__PURE__*/React.createElement(EinstellungenView, {
+  })), view === "einstellungen" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(EinstellungenView, {
     reminderTime: reminderTime,
     onChange: saveReminder,
     featureRequests: featureRequests,
     onChangeFeatureRequests: persistFeatureRequests
-  })), showSpruch && /*#__PURE__*/React.createElement(SpruchOverlay, {
+  }))), showSpruch && /*#__PURE__*/React.createElement(SpruchOverlay, {
     text: spruch,
     onClose: () => setShowSpruch(false)
   }));
 }
 
-/* ---------- palette / fonts ---------- */
+/* ---------- error boundary: catches render errors in a tab so a bug there shows a message instead of a silent blank screen ---------- */
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      error: null
+    };
+  }
+  static getDerivedStateFromError(error) {
+    return {
+      error
+    };
+  }
+  render() {
+    if (this.state.error) {
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: 20
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontFamily: FONT.display,
+          fontSize: 16,
+          fontWeight: 600,
+          color: PALETTE.coral,
+          marginBottom: 10
+        }
+      }, "Hier ist etwas schiefgelaufen"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 12,
+          color: PALETTE.textSecondary,
+          background: PALETTE.bgBottom,
+          border: `1px solid ${PALETTE.cardBorder}`,
+          borderRadius: 10,
+          padding: 12,
+          fontFamily: FONT.mono,
+          wordBreak: "break-word"
+        }
+      }, this.state.error.message || String(this.state.error)));
+    }
+    return this.props.children;
+  }
+}
 const PALETTE = {
   bgTop: "#262B3D",
   bgBottom: "#14161F",
@@ -504,7 +546,10 @@ const styles = {
     background: `linear-gradient(180deg, ${PALETTE.bgTop} 0%, ${PALETTE.bgBottom} 100%)`,
     fontFamily: FONT.body,
     color: PALETTE.text,
-    paddingBottom: 48,
+    paddingBottom: "calc(48px + env(safe-area-inset-bottom, 0px))",
+    paddingTop: "env(safe-area-inset-top, 0px)",
+    paddingLeft: "env(safe-area-inset-left, 0px)",
+    paddingRight: "env(safe-area-inset-right, 0px)",
     position: "relative"
   },
   shell: {
@@ -517,7 +562,8 @@ const styles = {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "100vh"
+    minHeight: "100vh",
+    paddingTop: "env(safe-area-inset-top, 0px)"
   }
 };
 

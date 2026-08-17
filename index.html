@@ -14,11 +14,12 @@
 <style>
   html, body, #root { margin: 0; padding: 0; min-height: 100vh; background: #14161F; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  .safe-fallback { padding-top: env(safe-area-inset-top, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 </style>
 </head>
 <body>
 <div id="root">
-  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#9DA3BA;font-family:system-ui,sans-serif;text-align:center;padding:24px;">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#9DA3BA;font-family:system-ui,sans-serif;text-align:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));">
     lädt …
   </div>
 </div>
@@ -38,7 +39,7 @@
     document.getElementById("root").dataset.loaded = "true";
   } catch (e) {
     document.getElementById("root").innerHTML =
-      '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F1EDE4;font-family:system-ui,sans-serif;text-align:center;padding:24px;background:#14161F;">' +
+      '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F1EDE4;font-family:system-ui,sans-serif;text-align:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));background:#14161F;">' +
       '<div style="font-size:17px;margin-bottom:10px;">StatSpatz konnte nicht laden</div>' +
       '<div style="font-size:12px;color:#E2836F;background:#20232F;border-radius:8px;padding:12px;text-align:left;max-width:100%;overflow-wrap:break-word;font-family:monospace;">' +
       (e && e.message ? e.message : String(e)) +
@@ -51,7 +52,7 @@
     const root = document.getElementById("root");
     if (root && !root.dataset.loaded) {
       root.innerHTML =
-        '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F1EDE4;font-family:system-ui,sans-serif;text-align:center;padding:24px;background:#14161F;">' +
+        '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F1EDE4;font-family:system-ui,sans-serif;text-align:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));background:#14161F;">' +
         '<div style="font-size:17px;margin-bottom:10px;">StatSpatz konnte nicht laden</div>' +
         '<div style="font-size:12px;color:#E2836F;background:#20232F;border-radius:8px;padding:12px;text-align:left;max-width:100%;overflow-wrap:break-word;font-family:monospace;">' +
         (e.message || "unbekannter Fehler") + '<br>' + (e.filename ? e.filename + ':' + e.lineno : '') +
