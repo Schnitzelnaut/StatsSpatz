@@ -71,16 +71,32 @@ async function fetchWetterAmStandort() {
     latitude,
     longitude
   } = pos.coords;
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weathercode`;
+  const heute = new Date().toISOString().slice(0, 10);
+  // hourly data for the whole day (not just this moment) so the value represents
+  // the day as a whole rather than whatever the weather happened to be at save-time
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=weathercode&hourly=temperature_2m,relative_humidity_2m&start_date=${heute}&end_date=${heute}&timezone=auto`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Wetterdienst nicht erreichbar");
   const data = await res.json();
-  const c = data.current || {};
-  const beschreibung = WEATHERCODE_DE[c.weathercode] || "";
-  const temp = c.temperature_2m != null ? `${Math.round(c.temperature_2m)}°C` : "";
+  const beschreibung = WEATHERCODE_DE[data.current && data.current.weathercode] || "";
+  const temps = (data.hourly && data.hourly.temperature_2m || []).filter(v => typeof v === "number");
+  const feuchten = (data.hourly && data.hourly.relative_humidity_2m || []).filter(v => typeof v === "number");
+  function tagesStats(werte) {
+    if (werte.length === 0) return null;
+    const avg = werte.reduce((a, b) => a + b, 0) / werte.length;
+    return {
+      avg: Math.round(avg),
+      min: Math.round(Math.min(...werte)),
+      max: Math.round(Math.max(...werte))
+    };
+  }
+  const tempStats = tagesStats(temps);
+  const feuchteStats = tagesStats(feuchten);
+  const wetterText = [beschreibung, tempStats ? `Ø ${tempStats.avg}°C (${tempStats.min}–${tempStats.max}°C)` : ""].filter(Boolean).join(", ");
+  const luftfeuchtigkeitText = feuchteStats ? `Ø ${feuchteStats.avg}% (${feuchteStats.min}–${feuchteStats.max}%)` : "";
   return {
-    wetter: [beschreibung, temp].filter(Boolean).join(", "),
-    luftfeuchtigkeit: c.relative_humidity_2m != null ? `${Math.round(c.relative_humidity_2m)}%` : ""
+    wetter: wetterText,
+    luftfeuchtigkeit: luftfeuchtigkeitText
   };
 }
 
@@ -111,7 +127,7 @@ const storageAdapter = {
   }
 };
 /* ---------- version ---------- */
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 const APP_BUILT_AT = "2026-08-17";
 
 /* ---------- field config ---------- */
@@ -271,7 +287,7 @@ const SECTIONS = [{
 
 /* ---------- main app ---------- */
 function StatSpatz() {
-  const [view, setView] = useState("form"); // form | verlauf | medikamente | einstellungen
+  const [view, setView] = useState("form"); // form | verlauf | medikamente | einstellungen | arztansicht
   const [entry, setEntry] = useState(emptyEntry());
   const [entries, setEntries] = useState([]);
   const [medications, setMedications] = useState([]);
@@ -291,7 +307,8 @@ function StatSpatz() {
     try {
       const w = await fetchWetterAmStandort();
       setEntry(prev => {
-        if (!force && prev.date === todayKey && (prev.wetter || prev.luftfeuchtigkeit) && prev.savedAt) {
+        if (prev.date !== todayKey) return prev; // never touch weather while editing a past day
+        if (!force && (prev.wetter || prev.luftfeuchtigkeit) && prev.savedAt) {
           return prev; // don't overwrite an already-saved day unless forced
         }
         return {
@@ -395,12 +412,13 @@ function StatSpatz() {
     setSaving(true);
     setError("");
     try {
+      const zielDatum = entry.date || todayKey;
       const toSave = {
         ...entry,
-        date: todayKey,
+        date: zielDatum,
         savedAt: new Date().toISOString()
       };
-      const rest = entries.filter(e => e.date !== todayKey);
+      const rest = entries.filter(e => e.date !== zielDatum);
       const next = [...rest, toSave].sort((a, b) => a.date.localeCompare(b.date));
       const result = await storageAdapter.set("entries", JSON.stringify(next), true);
       if (!result) throw new Error("Speichern fehlgeschlagen");
@@ -419,6 +437,20 @@ function StatSpatz() {
     } finally {
       setSaving(false);
     }
+  }
+  function editEntry(pastEntry) {
+    setEntry({
+      ...emptyEntry(),
+      ...pastEntry,
+      medikamentenAenderungen: []
+    });
+    setView("form");
+  }
+  function editAbbrechen() {
+    const todays = entries.find(e => e.date === todayKey);
+    setEntry(todays ? {
+      ...todays
+    } : emptyEntry());
   }
   async function deleteEntry(id) {
     const next = entries.filter(e => e.id !== id);
@@ -453,6 +485,13 @@ function StatSpatz() {
       }
     }, "lädt …")));
   }
+  if (view === "arztansicht") {
+    return /*#__PURE__*/React.createElement(ArztAnsicht, {
+      entries: entries,
+      medications: medications,
+      onClose: () => setView("verlauf")
+    });
+  }
   return /*#__PURE__*/React.createElement("div", {
     style: styles.appBg
   }, /*#__PURE__*/React.createElement("div", {
@@ -473,13 +512,17 @@ function StatSpatz() {
     justSaved: justSaved,
     error: error,
     wetterStatus: wetterStatus,
-    onRefreshWetter: () => holeWetter(true)
+    onRefreshWetter: () => holeWetter(true),
+    todayKey: todayKey,
+    onCancelEdit: editAbbrechen
   })), view === "verlauf" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(VerlaufView, {
     entries: entries,
     medications: medications,
     featureRequests: featureRequests,
     onDeleteEntry: deleteEntry,
-    wochenvergleichAn: wochenvergleichAn
+    onEditEntry: editEntry,
+    wochenvergleichAn: wochenvergleichAn,
+    onOpenArztAnsicht: () => setView("arztansicht")
   })), view === "medikamente" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(MedikamenteView, {
     medications: medications,
     onChange: persistMedications
@@ -889,7 +932,9 @@ function FormView({
   justSaved,
   error,
   wetterStatus,
-  onRefreshWetter
+  onRefreshWetter,
+  todayKey,
+  onCancelEdit
 }) {
   function updateChanges(next) {
     setField("medikamentenAenderungen", next);
@@ -906,7 +951,36 @@ function FormView({
   function removeChange(id) {
     updateChanges(entry.medikamentenAenderungen.filter(c => c.id !== id));
   }
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(ProgressFeathers, {
+  const bearbeitetVergangenheit = entry.date && entry.date !== todayKey;
+  return /*#__PURE__*/React.createElement("div", null, bearbeitetVergangenheit && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 16,
+      padding: "12px 14px",
+      borderRadius: 12,
+      background: "rgba(127,166,196,0.1)",
+      border: `1px solid rgba(127,166,196,0.3)`,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: PALETTE.sky
+    }
+  }, "Du bearbeitest den Eintrag vom ", entry.date), /*#__PURE__*/React.createElement("button", {
+    onClick: onCancelEdit,
+    style: {
+      background: "transparent",
+      border: "none",
+      color: PALETTE.textSecondary,
+      fontSize: 12,
+      textDecoration: "underline",
+      cursor: "pointer",
+      flexShrink: 0
+    }
+  }, "zu heute")), /*#__PURE__*/React.createElement(ProgressFeathers, {
     completion: completion
   }), /*#__PURE__*/React.createElement(Card, {
     title: "Ort & Wetter"
@@ -1547,6 +1621,51 @@ function exportiereDaten(entries, medications, featureRequests) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+function BackupHinweis({
+  entries
+}) {
+  const [letzterExport, setLetzterExport] = useState(null);
+  const [geladen, setGeladen] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await storageAdapter.get("settings", true);
+        if (s && s.value) {
+          const parsed = JSON.parse(s.value);
+          if (parsed.letzterExport) setLetzterExport(parsed.letzterExport);
+        }
+      } catch (e) {}
+      setGeladen(true);
+    })();
+  }, []);
+  if (!geladen || entries.length < 5) return null;
+  const tageSeitExport = letzterExport ? Math.floor((Date.now() - new Date(letzterExport.datum).getTime()) / 86400000) : null;
+  const neueEintraegeSeitExport = letzterExport ? entries.length - letzterExport.anzahlTage : entries.length;
+  const zeigen = !letzterExport || tageSeitExport >= 14;
+  if (!zeigen || neueEintraegeSeitExport <= 0) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14,
+      padding: "13px 14px",
+      borderRadius: 12,
+      background: "rgba(217,164,91,0.08)",
+      border: `1px solid rgba(217,164,91,0.25)`,
+      fontSize: 12.5,
+      color: PALETTE.textSecondary,
+      lineHeight: 1.5
+    }
+  }, letzterExport ? `Der letzte Export ist ${tageSeitExport} Tage her. Die Daten liegen nur auf diesem Gerät — ein frisches Backup schadet nicht.` : "Noch kein Export gemacht. Die Daten liegen nur auf diesem Gerät — ein Backup schützt vor Verlust, falls das Handy mal was verschluckt.");
+}
+async function merkeExport(entries) {
+  try {
+    await storageAdapter.set("settings", JSON.stringify({
+      letzterExport: {
+        datum: new Date().toISOString(),
+        anzahlTage: entries.length
+      }
+    }), true);
+  } catch (e) {}
+}
 function ExportCard({
   entries,
   medications,
@@ -1555,15 +1674,20 @@ function ExportCard({
   const offen = (featureRequests || []).filter(f => !f.erledigt).length;
   return /*#__PURE__*/React.createElement(Card, {
     title: "Frag die KI"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(BackupHinweis, {
+    entries: entries
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
       color: PALETTE.textSecondary,
       lineHeight: 1.5,
       marginBottom: 14
     }
-  }, "Lädt alle bisher gesammelten Tage", offen > 0 ? ` sowie ${offen} offene Feature-Wunsch${offen === 1 ? "" : "e"}` : "", " als Datei herunter. Die kannst du direkt in einen Chat schicken, um eine ausführlichere Analyse zu bekommen oder neue Funktionen einbauen zu lassen."), /*#__PURE__*/React.createElement("button", {
-    onClick: () => exportiereDaten(entries, medications, featureRequests),
+  }, "Lädt alle bisher gesammelten Tage", offen > 0 ? ` sowie ${offen} offene Feature-Wunsch${offen === 1 ? "" : "e"}` : "", " als Datei herunter. Die kannst du direkt in einen Chat schicken, um eine ausführlichere Analyse zu bekommen oder neue Funktionen einbauen zu lassen. Dient nebenbei auch als Backup."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      exportiereDaten(entries, medications, featureRequests);
+      merkeExport(entries);
+    },
     disabled: entries.length === 0,
     style: {
       width: "100%",
@@ -1679,6 +1803,183 @@ function WochenvergleichCard({
   }, "Reine Durchschnittswerte, keine Bewertung. Schwankungen sind normal."));
 }
 
+/* ---------- printable doctor summary ---------- */
+function ArztAnsicht({
+  entries,
+  medications,
+  onClose
+}) {
+  const sortiert = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+  const von = sortiert[0] ? sortiert[0].date : "–";
+  const bis = sortiert[sortiert.length - 1] ? sortiert[sortiert.length - 1].date : "–";
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      background: "#ffffff",
+      color: "#111111",
+      fontFamily: "system-ui, sans-serif"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "no-print",
+    style: {
+      position: "sticky",
+      top: 0,
+      background: "#f4f4f4",
+      borderBottom: "1px solid #ddd",
+      padding: "14px 16px",
+      display: "flex",
+      gap: 10,
+      justifyContent: "space-between",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      background: "transparent",
+      border: "1px solid #999",
+      borderRadius: 8,
+      padding: "8px 14px",
+      fontSize: 13,
+      cursor: "pointer"
+    }
+  }, "← Zurück"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => window.print(),
+    style: {
+      background: "#111111",
+      color: "#fff",
+      border: "none",
+      borderRadius: 8,
+      padding: "8px 16px",
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: "pointer"
+    }
+  }, "Drucken / Als PDF sichern")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 700,
+      margin: "0 auto",
+      padding: "24px 20px 60px"
+    }
+  }, /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: 20,
+      marginBottom: 4
+    }
+  }, "StatSpatz — Übersicht"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#555",
+      marginBottom: 24
+    }
+  }, "Zeitraum: ", von, " bis ", bis, " · ", entries.length, " erfasste ", entries.length === 1 ? "Tag" : "Tage"), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: 15,
+      marginBottom: 8
+    }
+  }, "Aktuelle Medikamente"), medications.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#777",
+      marginBottom: 24
+    }
+  }, "Keine eingetragen.") : /*#__PURE__*/React.createElement("ul", {
+    style: {
+      fontSize: 13,
+      marginBottom: 24,
+      paddingLeft: 18
+    }
+  }, medications.map(m => /*#__PURE__*/React.createElement("li", {
+    key: m.id
+  }, m.name, " — ", m.dosis))), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: 15,
+      marginBottom: 8
+    }
+  }, "Tagesübersicht"), /*#__PURE__*/React.createElement("table", {
+    style: {
+      width: "100%",
+      borderCollapse: "collapse",
+      fontSize: 11.5
+    }
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+    style: {
+      borderBottom: "2px solid #111"
+    }
+  }, ["Datum", "Ort", "Energie", "Wohlb.", "Fog", "Kopf", "Gelenk", "Muskel", "Migräne", "Schlaf(h)", "PEM", "POTS"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: {
+      textAlign: "left",
+      padding: "5px 4px",
+      whiteSpace: "nowrap"
+    }
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, sortiert.map(e => /*#__PURE__*/React.createElement("tr", {
+    key: e.id,
+    style: {
+      borderBottom: "1px solid #ddd"
+    }
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.date), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.standort), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.energie), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.wohlbefinden), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.brainfog), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.kopfschmerz), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.gelenkschmerz), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.muskelschmerz), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.migraene), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.schlaflaenge), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.pem ? "✓" : ""), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px"
+    }
+  }, e.pots ? "✓" : ""))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#999",
+      marginTop: 24
+    }
+  }, "Werte auf einer Skala von 0–10 (außer Schlaf in Stunden). Erstellt mit StatSpatz ", APP_VERSION, ", exportiert am", " ", new Date().toLocaleDateString("de-DE"), ".")), /*#__PURE__*/React.createElement("style", null, `
+        @media print {
+          .no-print { display: none !important; }
+          table { page-break-inside: auto; }
+          tr { page-break-inside: avoid; }
+        }
+      `));
+}
+
 /* ---------- verlauf (history) view ---------- */
 function ChipGroupMulti({
   options,
@@ -1726,7 +2027,9 @@ function VerlaufView({
   medications,
   featureRequests,
   onDeleteEntry,
-  wochenvergleichAn
+  onEditEntry,
+  wochenvergleichAn,
+  onOpenArztAnsicht
 }) {
   const [metrik, setMetrik] = useState("wohlbefinden");
   const [zeitMetriken, setZeitMetriken] = useState(["wohlbefinden", "energie"]);
@@ -1990,7 +2293,18 @@ function VerlaufView({
     style: {
       color: PALETTE.coral
     }
-  }, "BF ", e.brainfog)), onDeleteEntry && /*#__PURE__*/React.createElement("button", {
+  }, "BF ", e.brainfog)), onEditEntry && /*#__PURE__*/React.createElement("button", {
+    onClick: () => onEditEntry(e),
+    "aria-label": "Eintrag bearbeiten",
+    style: {
+      background: "transparent",
+      border: "none",
+      color: PALETTE.sky,
+      cursor: "pointer",
+      fontSize: 13,
+      padding: 2
+    }
+  }, "✎"), onDeleteEntry && /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       if (window.confirm(`Eintrag vom ${e.date} wirklich löschen?`)) onDeleteEntry(e.id);
     },
@@ -2004,11 +2318,40 @@ function VerlaufView({
       lineHeight: 1,
       padding: 2
     }
-  }, "×")))))), /*#__PURE__*/React.createElement(ExportCard, {
+  }, "×")))))), /*#__PURE__*/React.createElement(ArztExportCard, {
+    onOpen: onOpenArztAnsicht
+  }), /*#__PURE__*/React.createElement(ExportCard, {
     entries: entries,
     medications: medications,
     featureRequests: featureRequests
   }));
+}
+function ArztExportCard({
+  onOpen
+}) {
+  return /*#__PURE__*/React.createElement(Card, {
+    title: "Für Arzt/Ärztin"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: PALETTE.textSecondary,
+      lineHeight: 1.5,
+      marginBottom: 14
+    }
+  }, "Erstellt eine übersichtliche, druckbare Zusammenfassung aller Tage und der aktuellen Medikamente. Lässt sich direkt als PDF sichern oder ausdrucken."), /*#__PURE__*/React.createElement("button", {
+    onClick: onOpen,
+    style: {
+      width: "100%",
+      padding: "13px 0",
+      borderRadius: 12,
+      border: `1px solid ${PALETTE.cardBorder}`,
+      background: "transparent",
+      color: PALETTE.sky,
+      fontWeight: 700,
+      fontSize: 14,
+      cursor: "pointer"
+    }
+  }, "Übersicht öffnen"));
 }
 function Legend({
   color,
