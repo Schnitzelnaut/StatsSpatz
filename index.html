@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="StatSpatz" />
 <link rel="manifest" href="manifest.json" />
-<link rel="apple-touch-icon" href="icons/icon-180.png" />
-<link rel="icon" href="icons/icon-32.png" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<link rel="icon" href="icon-32.png" />
 <style>
   html, body, #root { margin: 0; padding: 0; min-height: 100vh; background: #14161F; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -33,13 +33,17 @@
 <script type="text/babel" data-presets="react" data-plugins="transform-react-jsx" src="app.jsx"></script>
 <script type="text/babel">
   try {
+    if (typeof StatSpatz === "undefined") throw new Error("StatSpatz-Komponente wurde nicht gefunden (app.jsx nicht geladen oder Fehler beim Kompilieren)");
     const root = ReactDOM.createRoot(document.getElementById("root"));
     root.render(React.createElement(StatSpatz));
+    document.getElementById("root").dataset.loaded = "true";
   } catch (e) {
     document.getElementById("root").innerHTML =
       '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F1EDE4;font-family:system-ui,sans-serif;text-align:center;padding:24px;background:#14161F;">' +
-      '<div style="font-size:17px;margin-bottom:8px;">StatSpatz konnte nicht laden</div>' +
-      '<div style="font-size:13px;color:#9DA3BA;">Bitte einmal kurz Internet prüfen und die App neu öffnen.</div></div>';
+      '<div style="font-size:17px;margin-bottom:10px;">StatSpatz konnte nicht laden</div>' +
+      '<div style="font-size:12px;color:#E2836F;background:#20232F;border-radius:8px;padding:12px;text-align:left;max-width:100%;overflow-wrap:break-word;font-family:monospace;">' +
+      (e && e.message ? e.message : String(e)) +
+      '</div></div>';
   }
 </script>
 
@@ -49,8 +53,10 @@
     if (root && !root.dataset.loaded) {
       root.innerHTML =
         '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F1EDE4;font-family:system-ui,sans-serif;text-align:center;padding:24px;background:#14161F;">' +
-        '<div style="font-size:17px;margin-bottom:8px;">StatSpatz konnte nicht laden</div>' +
-        '<div style="font-size:13px;color:#9DA3BA;">Bitte einmal kurz Internet prüfen und die App neu öffnen.</div></div>';
+        '<div style="font-size:17px;margin-bottom:10px;">StatSpatz konnte nicht laden</div>' +
+        '<div style="font-size:12px;color:#E2836F;background:#20232F;border-radius:8px;padding:12px;text-align:left;max-width:100%;overflow-wrap:break-word;font-family:monospace;">' +
+        (e.message || "unbekannter Fehler") + '<br>' + (e.filename ? e.filename + ':' + e.lineno : '') +
+        '</div></div>';
     }
   });
   if ("serviceWorker" in navigator) {
