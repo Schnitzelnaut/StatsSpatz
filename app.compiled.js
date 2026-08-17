@@ -111,7 +111,7 @@ const storageAdapter = {
   }
 };
 /* ---------- version ---------- */
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 const APP_BUILT_AT = "2026-08-17";
 
 /* ---------- field config ---------- */
@@ -276,6 +276,7 @@ function StatSpatz() {
   const [entries, setEntries] = useState([]);
   const [medications, setMedications] = useState([]);
   const [featureRequests, setFeatureRequests] = useState([]);
+  const [wochenvergleichAn, setWochenvergleichAn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -324,6 +325,13 @@ function StatSpatz() {
       try {
         const f = await storageAdapter.get("featureRequests", true);
         if (f && f.value) setFeatureRequests(JSON.parse(f.value));
+      } catch (e) {}
+      try {
+        const wv = await storageAdapter.get("settings", true);
+        if (wv && wv.value) {
+          const parsed = JSON.parse(wv.value);
+          if (typeof parsed.wochenvergleichAn === "boolean") setWochenvergleichAn(parsed.wochenvergleichAn);
+        }
       } catch (e) {}
       setLoading(false);
     })();
@@ -412,6 +420,24 @@ function StatSpatz() {
       setSaving(false);
     }
   }
+  async function deleteEntry(id) {
+    const next = entries.filter(e => e.id !== id);
+    try {
+      await storageAdapter.set("entries", JSON.stringify(next), true);
+      setEntries(next);
+      if (entry.id === id) {
+        setEntry(emptyEntry());
+      }
+    } catch (e) {}
+  }
+  async function toggleWochenvergleich(next) {
+    setWochenvergleichAn(next);
+    try {
+      await storageAdapter.set("settings", JSON.stringify({
+        wochenvergleichAn: next
+      }), true);
+    } catch (e) {}
+  }
   if (loading) {
     return /*#__PURE__*/React.createElement("div", {
       style: styles.appBg
@@ -451,13 +477,17 @@ function StatSpatz() {
   })), view === "verlauf" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(VerlaufView, {
     entries: entries,
     medications: medications,
-    featureRequests: featureRequests
+    featureRequests: featureRequests,
+    onDeleteEntry: deleteEntry,
+    wochenvergleichAn: wochenvergleichAn
   })), view === "medikamente" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(MedikamenteView, {
     medications: medications,
     onChange: persistMedications
   })), view === "einstellungen" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(EinstellungenView, {
     featureRequests: featureRequests,
-    onChangeFeatureRequests: persistFeatureRequests
+    onChangeFeatureRequests: persistFeatureRequests,
+    wochenvergleichAn: wochenvergleichAn,
+    onToggleWochenvergleich: toggleWochenvergleich
   }))), showSpruch && /*#__PURE__*/React.createElement(SpruchOverlay, {
     text: spruch,
     onClose: () => setShowSpruch(false)
@@ -1549,6 +1579,106 @@ function ExportCard({
   }, "Daten exportieren (", entries.length, " ", entries.length === 1 ? "Tag" : "Tage", ")"));
 }
 
+/* ---------- weekly comparison (neutral, opt-in) ---------- */
+function tageInFenster(entries, startTageZurueck, endTageZurueck) {
+  const heute = new Date();
+  heute.setHours(0, 0, 0, 0);
+  return entries.filter(e => {
+    const d = new Date(e.date);
+    const diffTage = Math.round((heute - d) / 86400000);
+    return diffTage >= startTageZurueck && diffTage < endTageZurueck;
+  });
+}
+function durchschnitt(entries, key) {
+  const werte = entries.map(e => e[key]).filter(v => typeof v === "number");
+  if (werte.length === 0) return null;
+  return Math.round(werte.reduce((a, b) => a + b, 0) / werte.length * 10) / 10;
+}
+function WochenvergleichCard({
+  entries
+}) {
+  const [metrik, setMetrik] = useState("wohlbefinden");
+  const dieseWoche = useMemo(() => tageInFenster(entries, 0, 7), [entries]);
+  const letzteWoche = useMemo(() => tageInFenster(entries, 7, 14), [entries]);
+  const wertDiese = durchschnitt(dieseWoche, metrik);
+  const wertLetzte = durchschnitt(letzteWoche, metrik);
+  const metrikDef = VERGLEICH_METRIKEN.find(m => m.key === metrik);
+  return /*#__PURE__*/React.createElement(Card, {
+    title: "Woche im Vergleich"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement(ChipGroup, {
+    options: VERGLEICH_METRIKEN.map(m => m.label),
+    value: metrikDef.label,
+    onChange: label => setMetrik(VERGLEICH_METRIKEN.find(m => m.label === label).key)
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      border: `1px solid ${PALETTE.cardBorder}`,
+      borderRadius: 12,
+      padding: "14px 12px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: PALETTE.textSecondary,
+      marginBottom: 6
+    }
+  }, "Diese Woche"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FONT.mono,
+      fontSize: 22,
+      color: PALETTE.sky
+    }
+  }, wertDiese === null ? "–" : wertDiese), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: PALETTE.textSecondary,
+      marginTop: 4
+    }
+  }, dieseWoche.length, " ", dieseWoche.length === 1 ? "Tag" : "Tage")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      border: `1px solid ${PALETTE.cardBorder}`,
+      borderRadius: 12,
+      padding: "14px 12px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: PALETTE.textSecondary,
+      marginBottom: 6
+    }
+  }, "Letzte Woche"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FONT.mono,
+      fontSize: 22,
+      color: PALETTE.sky
+    }
+  }, wertLetzte === null ? "–" : wertLetzte), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: PALETTE.textSecondary,
+      marginTop: 4
+    }
+  }, letzteWoche.length, " ", letzteWoche.length === 1 ? "Tag" : "Tage"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: PALETTE.textSecondary,
+      marginTop: 12
+    }
+  }, "Reine Durchschnittswerte, keine Bewertung. Schwankungen sind normal."));
+}
+
 /* ---------- verlauf (history) view ---------- */
 function ChipGroupMulti({
   options,
@@ -1594,7 +1724,9 @@ const LINIENFARBEN = [PALETTE.gold, PALETTE.sage, PALETTE.coral, PALETTE.sky, "#
 function VerlaufView({
   entries,
   medications,
-  featureRequests
+  featureRequests,
+  onDeleteEntry,
+  wochenvergleichAn
 }) {
   const [metrik, setMetrik] = useState("wohlbefinden");
   const [zeitMetriken, setZeitMetriken] = useState(["wohlbefinden", "energie"]);
@@ -1664,6 +1796,8 @@ function VerlaufView({
   }
   const metrikDef = VERGLEICH_METRIKEN.find(m => m.key === metrik);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(KorrelationenCard, {
+    entries: entries
+  }), wochenvergleichAn && /*#__PURE__*/React.createElement(WochenvergleichCard, {
     entries: entries
   }), /*#__PURE__*/React.createElement(Card, {
     title: "Vergleich nach Ort"
@@ -1838,6 +1972,12 @@ function VerlaufView({
   }, e.standort)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
+      alignItems: "center",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
       gap: 10,
       fontFamily: FONT.mono,
       fontSize: 13
@@ -1850,7 +1990,21 @@ function VerlaufView({
     style: {
       color: PALETTE.coral
     }
-  }, "BF ", e.brainfog)))))), /*#__PURE__*/React.createElement(ExportCard, {
+  }, "BF ", e.brainfog)), onDeleteEntry && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      if (window.confirm(`Eintrag vom ${e.date} wirklich löschen?`)) onDeleteEntry(e.id);
+    },
+    "aria-label": "Eintrag löschen",
+    style: {
+      background: "transparent",
+      border: "none",
+      color: PALETTE.textSecondary,
+      cursor: "pointer",
+      fontSize: 16,
+      lineHeight: 1,
+      padding: 2
+    }
+  }, "×")))))), /*#__PURE__*/React.createElement(ExportCard, {
     entries: entries,
     medications: medications,
     featureRequests: featureRequests
@@ -1999,7 +2153,9 @@ function MedikamenteView({
 /* ---------- einstellungen (settings) view ---------- */
 function EinstellungenView({
   featureRequests,
-  onChangeFeatureRequests
+  onChangeFeatureRequests,
+  wochenvergleichAn,
+  onToggleWochenvergleich
 }) {
   const [draftWunsch, setDraftWunsch] = useState("");
   function addWunsch() {
@@ -2020,6 +2176,19 @@ function EinstellungenView({
     } : f));
   }
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Card, {
+    title: "Wochenvergleich"
+  }, /*#__PURE__*/React.createElement(ToggleRow, {
+    label: "Diese Woche neben letzter Woche anzeigen",
+    value: !!wochenvergleichAn,
+    onChange: onToggleWochenvergleich
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: PALETTE.textSecondary,
+      marginTop: 10,
+      lineHeight: 1.5
+    }
+  }, "Zeigt reine Durchschnittswerte nebeneinander, ohne Wertung oder Prozentangabe. Symptome bei ME/CFS schwanken normal von Woche zu Woche, ein Vergleich ist kein Urteil über einen guten oder schlechten Fortschritt. Standardmäßig ausgeblendet — nur einschalten, wenn es sich gut anfühlt.")), /*#__PURE__*/React.createElement(Card, {
     title: "Feature vorschlagen"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
