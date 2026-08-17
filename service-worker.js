@@ -1,4 +1,4 @@
-const CACHE = "statspatz-v1";
+const CACHE = "statspatz-v1.3.0";
 const ASSETS = [
   "./",
   "./index.html",
@@ -24,20 +24,26 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+// network-first: always try to get the freshest file, only fall back to the
+// cached copy when offline — this is what makes updates show up automatically
+// instead of the app being stuck on whatever was cached at install time.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const clone = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(event.request, clone));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || fetchPromise;
-    })
+    fetch(event.request)
+      .then((res) => {
+        if (res && res.status === 200) {
+          const clone = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, clone));
+        }
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

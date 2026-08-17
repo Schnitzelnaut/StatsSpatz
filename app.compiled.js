@@ -110,6 +110,10 @@ const storageAdapter = {
     }
   }
 };
+/* ---------- version ---------- */
+const APP_VERSION = "1.3.0";
+const APP_BUILT_AT = "2026-08-17";
+
 /* ---------- field config ---------- */
 const STANDORTE = ["Zuhause", "Bei Mutter", "Unterwegs", "Sonstiges"];
 const TAGESZEITEN = ["Morgens", "Mittags", "Nachmittags", "Abends", "War heute gleichmäßig"];
@@ -196,7 +200,7 @@ const TOGGLE_FIELDS = [{
   key: "uebelkeit",
   label: "Übelkeit"
 }];
-const SPRUECHE = ["Du musst heute nicht stark sein. Du musst nur atmen, und das tust du bereits.", "Dein Körper kämpft einen Kampf, den man von außen nicht sieht. Das macht ihn nicht weniger echt.", "Ruhe ist keine Kapitulation. Ruhe ist der Weg zurück zu dir selbst.", "Jeder Tag, den du festhältst, ist ein kleines Licht auf dem Weg zurück zu dir.", "Du bist nicht deine Symptome. Du bist der Mensch, der sie mit so viel Mut trägt.", "Was heute schwer war, muss morgen nicht schwer sein. Der Wind dreht sich.", "Du wächst nicht trotz dieser Zeit, sondern durch die Art, wie du sie trägst.", "Kleine Schritte zählen genauso wie große. Du bist heute einen davon gegangen.", "Dein Nest ist da, auch wenn der Himmel heute stürmisch war.", "Vertrau darauf: auch die längste Nacht kennt einen Morgen.", "Du bist geliebt, genau so, wie du heute warst.", "Nicht jeder Tag muss leicht sein, damit er wertvoll ist."];
+const SPRUECHE = ["Du musst heute nicht stark sein. Du musst nur atmen, und das tust du bereits.", "Dein Körper kämpft einen Kampf, den man von außen nicht sieht. Das macht ihn nicht weniger echt.", "Ruhe ist keine Kapitulation. Ruhe ist der Weg zurück zu dir selbst.", "Jeder Tag, den du festhältst, ist ein kleines Licht auf dem Weg zurück zu dir.", "Du bist nicht deine Symptome. Du bist der Mensch, der sie mit so viel Mut trägt.", "Was heute schwer war, muss morgen nicht schwer sein. Der Wind dreht sich.", "Du wächst nicht trotz dieser Zeit, sondern durch die Art, wie du sie trägst.", "Kleine Schritte zählen genauso wie große. Du bist heute einen davon gegangen.", "Dein Nest ist da, auch wenn der Himmel heute stürmisch war.", "Vertrau darauf: auch die längste Nacht kennt einen Morgen.", "Du bist geliebt, genau so, wie du heute warst.", "Nicht jeder Tag muss leicht sein, damit er wertvoll ist.", "Schritt für Schritt.", "Selbst wenn alles wieder schiefgeht, geht die Sonne trotzdem auf."];
 function emptyFeatureRequest() {
   return {
     id: crypto.randomUUID(),
@@ -277,7 +281,6 @@ function StatSpatz() {
   const [justSaved, setJustSaved] = useState(false);
   const [showSpruch, setShowSpruch] = useState(false);
   const [spruch, setSpruch] = useState("");
-  const [reminderTime, setReminderTime] = useState("20:00");
   const [error, setError] = useState("");
   const [wetterStatus, setWetterStatus] = useState("idle"); // idle | loading | done | error
 
@@ -321,13 +324,6 @@ function StatSpatz() {
       try {
         const f = await storageAdapter.get("featureRequests", true);
         if (f && f.value) setFeatureRequests(JSON.parse(f.value));
-      } catch (e) {}
-      try {
-        const s = await storageAdapter.get("settings", true);
-        if (s && s.value) {
-          const parsedS = JSON.parse(s.value);
-          if (parsedS.reminderTime) setReminderTime(parsedS.reminderTime);
-        }
       } catch (e) {}
       setLoading(false);
     })();
@@ -416,14 +412,6 @@ function StatSpatz() {
       setSaving(false);
     }
   }
-  async function saveReminder(time) {
-    setReminderTime(time);
-    try {
-      await storageAdapter.set("settings", JSON.stringify({
-        reminderTime: time
-      }), true);
-    } catch (e) {}
-  }
   if (loading) {
     return /*#__PURE__*/React.createElement("div", {
       style: styles.appBg
@@ -468,8 +456,6 @@ function StatSpatz() {
     medications: medications,
     onChange: persistMedications
   })), view === "einstellungen" && /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(EinstellungenView, {
-    reminderTime: reminderTime,
-    onChange: saveReminder,
     featureRequests: featureRequests,
     onChangeFeatureRequests: persistFeatureRequests
   }))), showSpruch && /*#__PURE__*/React.createElement(SpruchOverlay, {
@@ -2012,18 +1998,10 @@ function MedikamenteView({
 
 /* ---------- einstellungen (settings) view ---------- */
 function EinstellungenView({
-  reminderTime,
-  onChange,
   featureRequests,
   onChangeFeatureRequests
 }) {
-  const [permission, setPermission] = useState(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
   const [draftWunsch, setDraftWunsch] = useState("");
-  async function askPermission() {
-    if (typeof Notification === "undefined") return;
-    const res = await Notification.requestPermission();
-    setPermission(res);
-  }
   function addWunsch() {
     if (!draftWunsch.trim()) return;
     onChangeFeatureRequests([...(featureRequests || []), {
@@ -2042,44 +2020,6 @@ function EinstellungenView({
     } : f));
   }
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Card, {
-    title: "Erinnerung"
-  }, /*#__PURE__*/React.createElement(FieldLabel, {
-    text: "Um diese Uhrzeit erinnert dich StatSpatz ans Ausfüllen"
-  }), /*#__PURE__*/React.createElement("input", {
-    type: "time",
-    value: reminderTime,
-    onChange: e => onChange(e.target.value),
-    style: {
-      background: PALETTE.bgBottom,
-      border: `1px solid ${PALETTE.cardBorder}`,
-      borderRadius: 10,
-      padding: "10px 12px",
-      color: PALETTE.text,
-      fontSize: 16,
-      fontFamily: FONT.mono,
-      marginBottom: 16
-    }
-  }), permission !== "granted" && permission !== "unsupported" && /*#__PURE__*/React.createElement("button", {
-    onClick: askPermission,
-    style: {
-      width: "100%",
-      padding: "12px 0",
-      borderRadius: 12,
-      border: `1px solid ${PALETTE.gold}`,
-      background: "transparent",
-      color: PALETTE.gold,
-      fontWeight: 600,
-      fontSize: 14,
-      cursor: "pointer"
-    }
-  }, "Benachrichtigungen erlauben"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: PALETTE.textSecondary,
-      marginTop: 14,
-      lineHeight: 1.5
-    }
-  }, "Hinweis: die Erinnerung funktioniert zuverlässig nur, solange StatSpatz als installierte App/PWA offen im Hintergrund läuft. Für echte Push-Benachrichtigungen auch bei geschlossener App braucht es später eine eigene Server-Anbindung.")), /*#__PURE__*/React.createElement(Card, {
     title: "Feature vorschlagen"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2144,7 +2084,74 @@ function EinstellungenView({
       fontSize: 16,
       lineHeight: 1
     }
-  }, "×"))))));
+  }, "×"))))), /*#__PURE__*/React.createElement(VersionCard, null));
+}
+function VersionCard() {
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState("");
+  async function nachUpdateSuchen() {
+    setChecking(true);
+    setStatus("");
+    try {
+      if ("serviceWorker" in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) {
+          await reg.update();
+          if (reg.waiting) {
+            reg.waiting.postMessage({
+              type: "SKIP_WAITING"
+            });
+          }
+        }
+      }
+      const res = await fetch(`app.compiled.js?check=${Date.now()}`, {
+        cache: "no-store"
+      });
+      await res.text();
+      setStatus("Aktuell — lädt neu …");
+      setTimeout(() => window.location.reload(), 600);
+    } catch (e) {
+      setStatus("Konnte nicht prüfen, bitte Internetverbindung checken.");
+    } finally {
+      setChecking(false);
+    }
+  }
+  return /*#__PURE__*/React.createElement(Card, {
+    title: "Version"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: FONT.mono,
+      fontSize: 13,
+      color: PALETTE.text,
+      marginBottom: 4
+    }
+  }, "StatSpatz ", APP_VERSION), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: PALETTE.textSecondary,
+      marginBottom: 14
+    }
+  }, "Build vom ", APP_BUILT_AT), /*#__PURE__*/React.createElement("button", {
+    onClick: nachUpdateSuchen,
+    disabled: checking,
+    style: {
+      width: "100%",
+      padding: "11px 0",
+      borderRadius: 12,
+      border: `1px solid ${PALETTE.cardBorder}`,
+      background: "transparent",
+      color: PALETTE.sky,
+      fontWeight: 600,
+      fontSize: 14,
+      cursor: checking ? "default" : "pointer"
+    }
+  }, checking ? "prüft …" : "Nach Update suchen"), status && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: PALETTE.textSecondary,
+      marginTop: 10
+    }
+  }, status));
 }
 
 /* ---------- motivational overlay ---------- */
