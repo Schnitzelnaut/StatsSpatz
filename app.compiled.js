@@ -127,8 +127,8 @@ const storageAdapter = {
   }
 };
 /* ---------- version ---------- */
-const APP_VERSION = "1.5.0";
-const APP_BUILT_AT = "2026-08-17";
+const APP_VERSION = "1.5.1";
+const APP_BUILT_AT = "2026-08-18";
 
 /* ---------- field config ---------- */
 const STANDORTE = ["Zuhause", "Bei Mutter", "Unterwegs", "Sonstiges"];
@@ -258,6 +258,7 @@ function emptyEntry() {
     schlimmsteZeit: "War heute gleichmäßig",
     medikamenteGeaendert: false,
     medikamentenAenderungen: [],
+    medikamentenAngewendet: false,
     sonstiges: "",
     savedAt: null
   };
@@ -412,11 +413,13 @@ function StatSpatz() {
     setSaving(true);
     setError("");
     try {
+      const sollMedsAnwenden = entry.medikamenteGeaendert && entry.medikamentenAenderungen.length > 0 && !entry.medikamentenAngewendet;
       const zielDatum = entry.date || todayKey;
       const toSave = {
         ...entry,
         date: zielDatum,
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
+        medikamentenAngewendet: entry.medikamentenAngewendet || sollMedsAnwenden
       };
       const rest = entries.filter(e => e.date !== zielDatum);
       const next = [...rest, toSave].sort((a, b) => a.date.localeCompare(b.date));
@@ -424,7 +427,7 @@ function StatSpatz() {
       if (!result) throw new Error("Speichern fehlgeschlagen");
       setEntries(next);
       setEntry(toSave);
-      if (entry.medikamenteGeaendert && entry.medikamentenAenderungen.length > 0) {
+      if (sollMedsAnwenden) {
         const nextMeds = applyChangesToMedications(entry.medikamentenAenderungen);
         await persistMedications(nextMeds);
       }
@@ -2393,7 +2396,52 @@ function MedikamenteView({
       dosis
     } : m));
   }
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Card, {
+  const dupliziert = useMemo(() => {
+    const seen = new Set();
+    const dupIds = new Set();
+    medications.forEach(m => {
+      const key = `${m.name.trim().toLowerCase()}|${m.dosis.trim().toLowerCase()}`;
+      if (seen.has(key)) dupIds.add(m.id);else seen.add(key);
+    });
+    return dupIds;
+  }, [medications]);
+  function duplikateBereinigen() {
+    const seen = new Set();
+    const bereinigt = medications.filter(m => {
+      const key = `${m.name.trim().toLowerCase()}|${m.dosis.trim().toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    onChange(bereinigt);
+  }
+  return /*#__PURE__*/React.createElement("div", null, dupliziert.size > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14,
+      padding: "13px 14px",
+      borderRadius: 12,
+      background: "rgba(226,131,111,0.1)",
+      border: `1px solid rgba(226,131,111,0.3)`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: PALETTE.coral,
+      marginBottom: 10
+    }
+  }, dupliziert.size, " doppelte Einträge gefunden."), /*#__PURE__*/React.createElement("button", {
+    onClick: duplikateBereinigen,
+    style: {
+      background: "transparent",
+      border: `1px solid ${PALETTE.coral}`,
+      color: PALETTE.coral,
+      borderRadius: 10,
+      padding: "8px 14px",
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: "pointer"
+    }
+  }, "Duplikate bereinigen")), /*#__PURE__*/React.createElement(Card, {
     title: "Aktuelle Medikamente"
   }, medications.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2413,7 +2461,7 @@ function MedikamenteView({
       display: "flex",
       alignItems: "center",
       gap: 8,
-      border: `1px solid ${PALETTE.cardBorder}`,
+      border: `1px solid ${dupliziert.has(m.id) ? PALETTE.coral : PALETTE.cardBorder}`,
       borderRadius: 10,
       padding: "8px 10px"
     }
