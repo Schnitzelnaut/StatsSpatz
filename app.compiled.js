@@ -127,8 +127,8 @@ const storageAdapter = {
   }
 };
 /* ---------- version ---------- */
-const APP_VERSION = "1.5.1";
-const APP_BUILT_AT = "2026-08-18";
+const APP_VERSION = "1.6.0";
+const APP_BUILT_AT = "2026-08-19";
 
 /* ---------- field config ---------- */
 const STANDORTE = ["Zuhause", "Bei Mutter", "Unterwegs", "Sonstiges"];
@@ -147,6 +147,12 @@ const SLIDER_FIELDS = [{
   label: "Allgemeines Wohlbefinden",
   lowLabel: "sehr schlecht",
   highLabel: "sehr gut",
+  invert: false
+}, {
+  key: "stimmung",
+  label: "Stimmung",
+  lowLabel: "niedergeschlagen",
+  highLabel: "gut gestimmt",
   invert: false
 }, {
   key: "brainfog",
@@ -215,6 +221,9 @@ const TOGGLE_FIELDS = [{
 }, {
   key: "uebelkeit",
   label: "Übelkeit"
+}, {
+  key: "sprachstoerung",
+  label: "Sprachstörung (Wortfindung, verwaschene Sprache)"
 }];
 const SPRUECHE = ["Du musst heute nicht stark sein. Du musst nur atmen, und das tust du bereits.", "Dein Körper kämpft einen Kampf, den man von außen nicht sieht. Das macht ihn nicht weniger echt.", "Ruhe ist keine Kapitulation. Ruhe ist der Weg zurück zu dir selbst.", "Jeder Tag, den du festhältst, ist ein kleines Licht auf dem Weg zurück zu dir.", "Du bist nicht deine Symptome. Du bist der Mensch, der sie mit so viel Mut trägt.", "Was heute schwer war, muss morgen nicht schwer sein. Der Wind dreht sich.", "Du wächst nicht trotz dieser Zeit, sondern durch die Art, wie du sie trägst.", "Kleine Schritte zählen genauso wie große. Du bist heute einen davon gegangen.", "Dein Nest ist da, auch wenn der Himmel heute stürmisch war.", "Vertrau darauf: auch die längste Nacht kennt einen Morgen.", "Du bist geliebt, genau so, wie du heute warst.", "Nicht jeder Tag muss leicht sein, damit er wertvoll ist.", "Schritt für Schritt.", "Selbst wenn alles wieder schiefgeht, geht die Sonne trotzdem auf."];
 function emptyFeatureRequest() {
@@ -243,6 +252,15 @@ function emptyChange() {
     altDosis: ""
   };
 }
+function normalisiereSchlimmsteZeit(entryLike) {
+  if (!entryLike) return entryLike;
+  const val = entryLike.schlimmsteZeit;
+  if (Array.isArray(val)) return entryLike;
+  return {
+    ...entryLike,
+    schlimmsteZeit: typeof val === "string" && val ? [val] : ["War heute gleichmäßig"]
+  };
+}
 function emptyEntry() {
   return {
     id: crypto.randomUUID(),
@@ -255,7 +273,7 @@ function emptyEntry() {
     ...Object.fromEntries(TOGGLE_FIELDS.map(f => [f.key, false])),
     zyklus: "–",
     mahlzeiten: "Normal",
-    schlimmsteZeit: "War heute gleichmäßig",
+    schlimmsteZeit: ["War heute gleichmäßig"],
     medikamenteGeaendert: false,
     medikamentenAenderungen: [],
     medikamentenAngewendet: false,
@@ -330,10 +348,10 @@ function StatSpatz() {
           const parsed = JSON.parse(res.value);
           setEntries(parsed);
           const todays = parsed.find(e => e.date === todayKey);
-          if (todays) setEntry({
+          if (todays) setEntry(normalisiereSchlimmsteZeit({
             ...emptyEntry(),
             ...todays
-          });
+          }));
         }
       } catch (e) {}
       try {
@@ -442,11 +460,11 @@ function StatSpatz() {
     }
   }
   function editEntry(pastEntry) {
-    setEntry({
+    setEntry(normalisiereSchlimmsteZeit({
       ...emptyEntry(),
       ...pastEntry,
       medikamentenAenderungen: []
-    });
+    }));
     setView("form");
   }
   function editAbbrechen() {
@@ -924,6 +942,47 @@ function ChipGroup({
   }, opt)));
 }
 
+/* multi-select variant: "War heute gleichmäßig" is exclusive with the specific times */
+function ZeitpunkteAuswahl({
+  optionen,
+  ausgewaehlt,
+  onChange
+}) {
+  const gleichmaessig = "War heute gleichmäßig";
+  function toggle(opt) {
+    if (opt === gleichmaessig) {
+      onChange([gleichmaessig]);
+      return;
+    }
+    const ohneGleichmaessig = ausgewaehlt.filter(o => o !== gleichmaessig);
+    const next = ohneGleichmaessig.includes(opt) ? ohneGleichmaessig.filter(o => o !== opt) : [...ohneGleichmaessig, opt];
+    onChange(next.length === 0 ? [gleichmaessig] : next);
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 8
+    }
+  }, optionen.map(opt => {
+    const aktiv = ausgewaehlt.includes(opt);
+    return /*#__PURE__*/React.createElement("button", {
+      key: opt,
+      onClick: () => toggle(opt),
+      style: {
+        padding: "9px 14px",
+        borderRadius: 999,
+        border: `1px solid ${aktiv ? PALETTE.gold : PALETTE.cardBorder}`,
+        background: aktiv ? "rgba(217,164,91,0.16)" : "transparent",
+        color: aktiv ? PALETTE.gold : PALETTE.textSecondary,
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: "pointer"
+      }
+    }, opt);
+  }));
+}
+
 /* ---------- form view ---------- */
 function FormView({
   entry,
@@ -1056,7 +1115,7 @@ function FormView({
     onChange: setField
   }))), /*#__PURE__*/React.createElement(Card, {
     title: "Kopf & Nerven"
-  }, ["brainfog", "kopfschmerz", "migraene", "reizempfindlichkeit"].map(k => {
+  }, ["stimmung", "brainfog", "kopfschmerz", "migraene", "reizempfindlichkeit"].map(k => {
     const f = SLIDER_FIELDS.find(x => x.key === k);
     return /*#__PURE__*/React.createElement(SliderRow, {
       key: k,
@@ -1064,6 +1123,10 @@ function FormView({
       value: entry[k],
       onChange: setField
     });
+  }), /*#__PURE__*/React.createElement(ToggleRow, {
+    label: TOGGLE_FIELDS.find(f => f.key === "sprachstoerung").label,
+    value: entry.sprachstoerung,
+    onChange: v => setField("sprachstoerung", v)
   })), /*#__PURE__*/React.createElement(Card, {
     title: "Körper"
   }, ["gelenkschmerz", "muskelschmerz"].map(k => {
@@ -1074,7 +1137,7 @@ function FormView({
       value: entry[k],
       onChange: setField
     });
-  }), TOGGLE_FIELDS.filter(f => f.key !== "pem").map(f => /*#__PURE__*/React.createElement(ToggleRow, {
+  }), TOGGLE_FIELDS.filter(f => f.key !== "pem" && f.key !== "sprachstoerung").map(f => /*#__PURE__*/React.createElement(ToggleRow, {
     key: f.key,
     label: f.label,
     value: entry[f.key],
@@ -1144,10 +1207,10 @@ function FormView({
       height: 16
     }
   }), /*#__PURE__*/React.createElement(FieldLabel, {
-    text: "Wann war es am schlimmsten?"
-  }), /*#__PURE__*/React.createElement(ChipGroup, {
-    options: TAGESZEITEN,
-    value: entry.schlimmsteZeit,
+    text: "Wann war es am schlimmsten? (Mehrfachauswahl möglich)"
+  }), /*#__PURE__*/React.createElement(ZeitpunkteAuswahl, {
+    optionen: TAGESZEITEN,
+    ausgewaehlt: entry.schlimmsteZeit,
     onChange: v => setField("schlimmsteZeit", v)
   })), /*#__PURE__*/React.createElement(Card, {
     title: "Sonstiges"
@@ -1404,6 +1467,9 @@ const VERGLEICH_METRIKEN = [{
 }, {
   key: "energie",
   label: "Energie"
+}, {
+  key: "stimmung",
+  label: "Stimmung"
 }, {
   key: "brainfog",
   label: "Brain Fog"
